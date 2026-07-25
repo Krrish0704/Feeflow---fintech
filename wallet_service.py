@@ -5,13 +5,11 @@ import models
 import ledger_service
 
 def get_wallet_balance(db: Session, student_id: uuid.UUID):
-    # 1. Sum up money entering the wallet (Refunds / Overpayments)
     deposits = db.query(func.sum(models.LedgerEntry.amount)).filter(
         models.LedgerEntry.student_id == student_id,
         models.LedgerEntry.entry_type == "wallet_deposit"
     ).scalar() or 0.0
 
-    # 2. Sum up money leaving the wallet (Paying for fees)
     utilizations = db.query(func.sum(models.LedgerEntry.amount)).filter(
         models.LedgerEntry.student_id == student_id,
         models.LedgerEntry.entry_type == "wallet_utilization"
@@ -21,8 +19,6 @@ def get_wallet_balance(db: Session, student_id: uuid.UUID):
 
 def issue_refund_to_wallet(db: Session, student_id: uuid.UUID, amount: float, reason: str):
     ref_id = f"REFUND-{uuid.uuid4().hex[:8]}"
-    
-    # Write a credit to the ledger, specifically tagged as a wallet_deposit
     return ledger_service.record_ledger_entry(
         db=db,
         student_id=student_id,
@@ -31,40 +27,47 @@ def issue_refund_to_wallet(db: Session, student_id: uuid.UUID, amount: float, re
         direction="credit", 
         reference_id=ref_id,
         source="system_refund_admin",
-        metadata_payload={"reason": reason}
+        metadata_payload={"reason": reason},
+        auto_commit=True
     )
 
 def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
-    # 1. Check if they actually have enough money in the wallet
     current_wallet_balance = get_wallet_balance(db, student_id)
     if current_wallet_balance < amount:
         return {"status": "error", "message": f"Insufficient wallet balance. You only have ₹{current_wallet_balance}"}
 
-    # Generate a unique transaction group ID so auditors can link the two entries
     ref_group = f"W-PAY-{uuid.uuid4().hex[:8]}"
     
-    # 2. DEBIT the wallet (Take the money out of the Stored Value facility)
-    ledger_service.record_ledger_entry(
-        db=db,
-        student_id=student_id,
-        entry_type="wallet_utilization",
-        amount=amount,
-        direction="debit",
-        reference_id=f"{ref_group}-OUT",
-        source="student_wallet",
-        metadata_payload={"linked_txn": ref_group, "note": "Wallet Deduction"}
-    )
+    try:
+        # 1. DEBIT the wallet (auto_commit=False)
+        res1 = ledger_service.record_ledger_entry(
+            db=db, student_id=student_id, entry_type="wallet_utilization",
+            amount=amount, direction="debit", reference_id=f"{ref_group}-OUT",
+            source="student_wallet", metadata_payload={"linked_txn": ref_group},
+            auto_commit=False
+        )
+        if res1["status"] == "ignored":
+            db.rollback()
+            return {"status": "error", "message": "Duplicate transaction reference."}
 
-    # 3. CREDIT the fee account (Pay the actual school fee)
-    res = ledger_service.record_ledger_entry(
-        db=db,
-        student_id=student_id,
-        entry_type="payment",
-        amount=amount,
-        direction="credit",
-        reference_id=f"{ref_group}-IN",
-        source="student_wallet",
-        metadata_payload={"linked_txn": ref_group, "note": "Fee Payment via Wallet"}
-    )
-    
-    return {"status": "success", "message": f"₹{amount} successfully paid from wallet.", "new_wallet_balance": current_wallet_balance - amount}
+        # 2. CREDIT the fee account (auto_commit=False)
+        res2 = ledger_service.record_ledger_entry(
+            db=db, student_id=student_id, entry_type="payment",
+            amount=amount, direction="credit", reference_id=f"{ref_group}-IN",
+            source="student_wallet", metadata_payload={"linked_txn": ref_group},
+            auto_commit=False
+        )
+        if res2["status"] == "ignored":
+            db.rollback()
+            return {"status": "error", "message": "Duplicate transaction reference."}
+
+        # 3. ATOMIC COMMIT: Both entries land together or neither does
+        db.commit()
+        return {
+            "status": "success", 
+            "message": f"₹{amount} successfully paid from wallet atomically.", 
+            "new_wallet_balance": current_wallet_balance - amount
+        }
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": f"Atomic transaction failed: {str(e)}"}

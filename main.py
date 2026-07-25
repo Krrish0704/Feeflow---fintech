@@ -1,8 +1,8 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import models
 import database
-# 1. ADD reconciliation to your imports
-from routers import fees, waivers, payments, students, reconciliation 
+from routers import fees, waivers, payments, students, reconciliation, wallet
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -12,12 +12,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Enable CORS for Frontend connectivity
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins for hackathon development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(fees.router)
 app.include_router(waivers.router)
 app.include_router(payments.router)
 app.include_router(students.router)
-# 2. MOUNT the new router
-app.include_router(reconciliation.router) 
+app.include_router(reconciliation.router)
+app.include_router(wallet.router) # Newly mounted wallet router
 
 @app.get("/")
 def health_check():

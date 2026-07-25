@@ -3,21 +3,21 @@ from sqlalchemy.orm import Session
 import models
 import ledger_service
 
-def request_waiver(db: Session, student_id: uuid.UUID, amount: float):
-    # The Threshold Rule (Under ₹500 is auto-approved)
+def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_by: str):
+    # Hackathon standard threshold (can be mapped from SchoolSetting table in V2)
     AUTO_APPROVE_THRESHOLD = 500.0
 
     if amount <= AUTO_APPROVE_THRESHOLD:
-        # 1. It's under the limit! Auto-approve it instantly.
         new_waiver = models.WaiverApproval(
             student_id=student_id,
             requested_amount=amount,
-            status="approved" 
+            status="approved",
+            requested_by=requested_by,
+            approved_by="System_Auto_Threshold"
         )
         db.add(new_waiver)
-        db.flush() # Generates the UUID so we can use it below without committing yet
+        db.flush() 
 
-        # 2. Write straight to the ledger
         ref_id = f"WAIVER-AUTO-{new_waiver.id}"
         ledger_service.record_ledger_entry(
             db=db,
@@ -27,22 +27,22 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float):
             direction="credit",
             reference_id=ref_id,
             source="system_auto_approval",
-            metadata_payload={"approved_by": "System_Auto_Threshold"}
+            metadata_payload={"requested_by": requested_by, "approved_by": "System_Auto_Threshold"}
         )
         
         db.commit()
         return {
             "status": "success", 
-            "message": f"Waiver of ₹{amount} auto-approved (Under ₹{AUTO_APPROVE_THRESHOLD} limit).", 
+            "message": f"Waiver of ₹{amount} auto-approved (Under limit).", 
             "waiver": new_waiver
         }
 
     else:
-        # 3. It's over the limit. Send it to the Governor queue.
         new_waiver = models.WaiverApproval(
             student_id=student_id,
             requested_amount=amount,
-            status="pending"
+            status="pending",
+            requested_by=requested_by
         )
         db.add(new_waiver)
         db.commit()
@@ -50,12 +50,11 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float):
         
         return {
             "status": "pending", 
-            "message": f"Waiver of ₹{amount} requires Governor approval (Over ₹{AUTO_APPROVE_THRESHOLD} limit).", 
+            "message": f"Waiver of ₹{amount} requires Governor approval (Over limit).", 
             "waiver": new_waiver
         }
 
-def approve_waiver(db: Session, waiver_id: uuid.UUID):
-    # The Checker approves it
+def approve_waiver(db: Session, waiver_id: uuid.UUID, approved_by: str):
     waiver = db.query(models.WaiverApproval).filter(models.WaiverApproval.id == waiver_id).first()
     
     if not waiver:
@@ -63,12 +62,14 @@ def approve_waiver(db: Session, waiver_id: uuid.UUID):
     if waiver.status != "pending":
         return {"status": "error", "message": f"Waiver is already {waiver.status}"}
 
-    # 1. Update the waiver status
+    # GOVERNANCE RULE: Prevent self-approval (Maker cannot be the Checker)
+    if waiver.requested_by and waiver.requested_by == approved_by:
+        return {"status": "error", "message": "Segregation of Duties Violation: You cannot approve a waiver you requested yourself."}
+
     waiver.status = "approved"
+    waiver.approved_by = approved_by
     
-    # 2. Write the credit to the ledger to reduce the student's debt
     ref_id = f"WAIVER-{waiver.id}"
-    
     ledger_res = ledger_service.record_ledger_entry(
         db=db,
         student_id=waiver.student_id,
@@ -77,12 +78,12 @@ def approve_waiver(db: Session, waiver_id: uuid.UUID):
         direction="credit", 
         reference_id=ref_id,
         source="governance_dashboard",
-        metadata_payload={"approved_by": "System_Governor"}
+        metadata_payload={"requested_by": waiver.requested_by, "approved_by": approved_by}
     )
     
     if ledger_res["status"] == "success":
         db.commit()
-        return {"status": "success", "message": "Waiver approved and ledger updated.", "waiver": waiver}
+        return {"status": "success", "message": "Waiver approved by governor and ledger updated.", "waiver": waiver}
     else:
         db.rollback()
         return {"status": "error", "message": "Failed to update ledger during approval."}
