@@ -33,6 +33,7 @@ class FeeStructure(Base):
     due_date = Column(DateTime, nullable=False)
     conditions = Column(JSONB, nullable=True) # The dynamic rule engine payload
     is_active = Column(Boolean, default=True)
+    applicable_to = Column(JSONB)
 
 class WaiverApproval(Base):
     __tablename__ = "waiver_approvals"
@@ -40,3 +41,22 @@ class WaiverApproval(Base):
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"))
     requested_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String, default="pending") # Maker-checker lock
+
+class FeeAssignment(Base):
+    __tablename__ = "fee_assignments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
+    fee_structure_id = Column(UUID(as_uuid=True), ForeignKey("fee_structures.id"), nullable=False)
+    charge_ledger_entry_id = Column(UUID(as_uuid=True), ForeignKey("ledger_entries.id"))
+
+class StagingEntry(Base):
+    __tablename__ = "staging_entries"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    raw_data = Column(JSONB, nullable=False) 
+    status = Column(String, default="pending") 
+    suggested_student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    reference_id = Column(String, nullable=False, unique=True)
+    source = Column(String, nullable=False) 
