@@ -1,10 +1,10 @@
+from datetime import datetime
 import uuid
 from sqlalchemy.orm import Session
 import models
 import ledger_service
 
-def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_by: str):
-    # Hackathon standard threshold (can be mapped from SchoolSetting table in V2)
+def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_by: str, reason: str = None):
     AUTO_APPROVE_THRESHOLD = 500.0
 
     if amount <= AUTO_APPROVE_THRESHOLD:
@@ -13,7 +13,9 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
             requested_amount=amount,
             status="approved",
             requested_by=requested_by,
-            approved_by="System_Auto_Threshold"
+            approved_by="System_Auto_Threshold",
+            reason=reason,
+            resolved_at=datetime.utcnow() # Audit trail timestamp set!
         )
         db.add(new_waiver)
         db.flush() 
@@ -27,10 +29,11 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
             direction="credit",
             reference_id=ref_id,
             source="system_auto_approval",
-            metadata_payload={"requested_by": requested_by, "approved_by": "System_Auto_Threshold"}
+            metadata_payload={"requested_by": requested_by, "approved_by": "System_Auto_Threshold", "reason": reason}
         )
         
         db.commit()
+        db.refresh(new_waiver)
         return {
             "status": "success", 
             "message": f"Waiver of ₹{amount} auto-approved (Under limit).", 
@@ -42,7 +45,8 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
             student_id=student_id,
             requested_amount=amount,
             status="pending",
-            requested_by=requested_by
+            requested_by=requested_by,
+            reason=reason
         )
         db.add(new_waiver)
         db.commit()
@@ -62,12 +66,12 @@ def approve_waiver(db: Session, waiver_id: uuid.UUID, approved_by: str):
     if waiver.status != "pending":
         return {"status": "error", "message": f"Waiver is already {waiver.status}"}
 
-    # GOVERNANCE RULE: Prevent self-approval (Maker cannot be the Checker)
     if waiver.requested_by and waiver.requested_by == approved_by:
         return {"status": "error", "message": "Segregation of Duties Violation: You cannot approve a waiver you requested yourself."}
 
     waiver.status = "approved"
     waiver.approved_by = approved_by
+    waiver.resolved_at = datetime.utcnow() # Audit trail timestamp set!
     
     ref_id = f"WAIVER-{waiver.id}"
     ledger_res = ledger_service.record_ledger_entry(
@@ -78,11 +82,12 @@ def approve_waiver(db: Session, waiver_id: uuid.UUID, approved_by: str):
         direction="credit", 
         reference_id=ref_id,
         source="governance_dashboard",
-        metadata_payload={"requested_by": waiver.requested_by, "approved_by": approved_by}
+        metadata_payload={"requested_by": waiver.requested_by, "approved_by": approved_by, "reason": waiver.reason}
     )
     
     if ledger_res["status"] == "success":
         db.commit()
+        db.refresh(waiver)
         return {"status": "success", "message": "Waiver approved by governor and ledger updated.", "waiver": waiver}
     else:
         db.rollback()

@@ -95,5 +95,9 @@ class WaiverOut(BaseModel):
     student_id: UUID
     requested_amount: float
     status: str
+    requested_by: str
+    approved_by: Optional[str] = None
+    reason: Optional[str] = None
+    resolved_at: Optional[datetime] = None
     
     model_config = {"from_attributes": True}

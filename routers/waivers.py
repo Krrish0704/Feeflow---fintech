@@ -8,14 +8,15 @@ import approvals_service
 
 router = APIRouter(prefix="/waivers", tags=["Maker-Checker Waivers"])
 
-@router.post("/request", response_model=schemas.WaiverOut)
+@router.post("/request", response_model=dict)
 def request_fee_waiver(waiver: schemas.WaiverCreate, db: Session = Depends(database.get_db)):
     """Maker: Request a waiver (auto-approves if under threshold)."""
     return approvals_service.request_waiver(
         db=db, 
         student_id=waiver.student_id, 
         amount=waiver.requested_amount, 
-        requested_by=waiver.requested_by
+        requested_by=waiver.requested_by,
+        reason=waiver.reason
     )
 
 @router.get("/pending", response_model=list[schemas.WaiverOut])
