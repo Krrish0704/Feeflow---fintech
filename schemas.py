@@ -87,6 +87,8 @@ class StagingEntryOut(BaseModel):
 class WaiverCreate(BaseModel):
     student_id: UUID
     requested_amount: float
+    reason: Optional[str] = None
+    requested_by: str
 
 class WaiverOut(BaseModel):
     id: UUID

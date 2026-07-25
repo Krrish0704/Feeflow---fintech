@@ -7,10 +7,24 @@ import ledger_service
 def resolve_amount(base_amount: float, conditions: dict | None, due_date: datetime, as_of: datetime = None) -> float:
     """Evaluates JSONB conditions for late penalties or sibling discounts dynamically."""
     as_of = as_of or datetime.utcnow()
-    if not conditions:
-        return float(base_amount)
     
-    amount = float(base_amount)
+    # Cast base_amount from SQLAlchemy Decimal to float immediately
+    base_amount = float(base_amount)
+    
+    if not conditions:
+        return base_amount
+    
+    amount = base_amount
+    
+    if "penalty_pct" in conditions:
+        grace = conditions.get("grace_period_days", 0)
+        if as_of > due_date + timedelta(days=grace):
+            amount += base_amount * (conditions["penalty_pct"] / 100.0)
+            
+    if "sibling_discount_pct" in conditions:
+        amount -= base_amount * (conditions["sibling_discount_pct"] / 100.0)
+        
+    return round(max(0.0, amount), 2)
     
     # 1. Check for Late Penalty Conditions
     if "penalty_pct" in conditions:

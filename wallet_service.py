@@ -5,15 +5,15 @@ import models
 import ledger_service
 
 def get_wallet_balance(db: Session, student_id: uuid.UUID):
-    deposits = db.query(func.sum(models.LedgerEntry.amount)).filter(
+    deposits = float(db.query(func.sum(models.LedgerEntry.amount)).filter(
         models.LedgerEntry.student_id == student_id,
         models.LedgerEntry.entry_type == "wallet_deposit"
-    ).scalar() or 0.0
+    ).scalar() or 0.0)
 
-    utilizations = db.query(func.sum(models.LedgerEntry.amount)).filter(
+    utilizations = float(db.query(func.sum(models.LedgerEntry.amount)).filter(
         models.LedgerEntry.student_id == student_id,
         models.LedgerEntry.entry_type == "wallet_utilization"
-    ).scalar() or 0.0
+    ).scalar() or 0.0)
 
     return deposits - utilizations
 

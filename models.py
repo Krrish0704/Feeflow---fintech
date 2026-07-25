@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from datetime import datetime
 from database import Base
+from sqlalchemy.orm import relationship
 
 class Student(Base):
     __tablename__ = "students"
@@ -37,10 +38,17 @@ class FeeStructure(Base):
 
 class WaiverApproval(Base):
     __tablename__ = "waiver_approvals"
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"))
+    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     requested_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(String, default="pending") # Maker-checker lock
+    status = Column(String, default="pending")
+    requested_by = Column(String, nullable=False)
+    approved_by = Column(String, nullable=True)
+    reason = Column(String, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    
+    student = relationship("Student", backref="waiver_approvals")
 
 class FeeAssignment(Base):
     __tablename__ = "fee_assignments"
