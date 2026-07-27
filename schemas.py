@@ -101,3 +101,6 @@ class WaiverOut(BaseModel):
     resolved_at: Optional[datetime] = None
     
     model_config = {"from_attributes": True}
+    
+class WaiverApprove(BaseModel):
+    approved_by: str

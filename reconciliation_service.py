@@ -2,9 +2,9 @@ import uuid
 from sqlalchemy.orm import Session
 import models
 import ledger_service
+from sqlalchemy.exc import IntegrityError
 
 def ingest_offline_payment(db: Session, student_id: uuid.UUID, amount: float, ref_id: str, raw_data: dict):
-    # Safely land the data in the staging area first
     entry = models.StagingEntry(
         raw_data=raw_data,
         status="pending",
@@ -19,9 +19,12 @@ def ingest_offline_payment(db: Session, student_id: uuid.UUID, amount: float, re
         db.commit()
         db.refresh(entry)
         return {"status": "staged", "message": "Offline payment caught in staging.", "entry": entry}
+    except IntegrityError:
+        db.rollback()
+        return {"status": "error", "message": "Duplicate offline sync reference detected."}
     except Exception as e:
         db.rollback()
-        return {"status": "error", "message": "Duplicate offline sync detected."}
+        return {"status": "error", "message": f"Staging failed: {str(e)}"}
 
 def promote_staging_entry(db: Session, staging_id: uuid.UUID):
     # Admin clicks 'Approve' to move money from staging to the actual ledger

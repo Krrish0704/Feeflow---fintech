@@ -24,7 +24,11 @@ def get_pending_waivers(db: Session = Depends(database.get_db)):
     """Checker: View all pending high-value waivers."""
     return db.query(models.WaiverApproval).filter(models.WaiverApproval.status == "pending").all()
 
-@router.post("/{waiver_id}/approve")
-def approve_fee_waiver(waiver_id: uuid.UUID, db: Session = Depends(database.get_db)):
+@router.post("/{waiver_id}/approve", response_model=dict)
+def approve_fee_waiver(
+    waiver_id: uuid.UUID,
+    approver: schemas.WaiverApprove,
+    db: Session = Depends(database.get_db)
+):
     """Checker: Approve a pending waiver and update the ledger."""
-    return approvals_service.approve_waiver(db=db, waiver_id=waiver_id)
+    return approvals_service.approve_waiver(db=db, waiver_id=waiver_id, approved_by=approver.approved_by)
