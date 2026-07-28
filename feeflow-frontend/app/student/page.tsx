@@ -1,101 +1,151 @@
-"use client";
-import { useState } from "react";
-import GlassCard from "../../components/ui/GlassCard";
-import Link from "next/link";
+// app/student/page.tsx
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { 
+  ShieldCheck, 
+  ArrowRight, 
+  Activity, 
+  Lock, 
+  CreditCard, 
+  CheckCircle2, 
+  Clock, 
+  FileText,
+  User
+} from 'lucide-react';
+
+type FeeItem = {
+  id: string;
+  title: string;
+  amount: string;
+  dueDate: string;
+  status: 'PENDING' | 'PAID';
+};
+
+const INITIAL_FEES: FeeItem[] = [
+  { id: 'FEE-01', title: 'Cannabis Lab Joint Rule & Materials', amount: '180.00', dueDate: '2026-04-15', status: 'PENDING' },
+  { id: 'FEE-02', title: 'Advanced Safety Compliance Module', amount: '95.00', dueDate: '2026-05-01', status: 'PAID' },
+];
 
 export default function StudentPortal() {
-  const [paymentState, setPaymentState] = useState<"idle" | "processing" | "success">("idle");
+  const [fees, setFees] = useState<FeeItem[]>(INITIAL_FEES);
+  const [systemLoad, setSystemLoad] = useState('0.03 ms');
+  const [scrolled, setScrolled] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
-  const handlePayment = () => {
-    setPaymentState("processing");
-    // Simulate network delay for the demo
-    setTimeout(() => {
-      setPaymentState("success");
-    }, 2000);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSystemLoad((Math.random() * 0.05 + 0.02).toFixed(2) + ' ms');
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const handlePay = (id: string) => {
+    setFees(prev => prev.map(f => f.id === id ? { ...f, status: 'PAID' } : f));
+    setPaymentStatus(`Transaction committed successfully for ${id}! Immutable ledger updated.`);
+    setTimeout(() => setPaymentStatus(null), 5000);
   };
 
+  const headerClass = scrolled
+    ? 'sticky top-0 z-30 transition-all duration-300 backdrop-blur-2xl bg-white/70 border-b border-black/5 shadow-[0_8px_32px_rgba(0,0,0,0.06)]'
+    : 'sticky top-0 z-30 transition-all duration-300 backdrop-blur-md bg-transparent border-b border-transparent';
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 md:p-20 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#f4f4f2] text-[#1a1a1a] font-sans selection:bg-[#ff7a00] selection:text-white relative overflow-hidden">
       
-      {/* Navigation header for easy demoing */}
-      <div className="w-full flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-white">Student Portal</h1>
-        <Link href="/" className="text-white/50 hover:text-white text-sm underline underline-offset-4">
-          Back to Main Dashboard
-        </Link>
-      </div>
+      {/* BACKGROUND AMBIENT GLOWS */}
+      <div className="fixed top-[-10%] left-[8%] w-[550px] h-[550px] rounded-full bg-gradient-to-br from-[#ff7a00]/20 to-[#ffbe98]/10 blur-[130px] pointer-events-none z-0" />
+      <div className="fixed bottom-[5%] right-[2%] w-[650px] h-[650px] rounded-full bg-gradient-to-tl from-[#00a8e8]/10 to-[#ff7a00]/10 blur-[150px] pointer-events-none z-0" />
 
-      <GlassCard className="w-full p-8" delay={0.1}>
+      {/* HEADER */}
+      <header className={headerClass}>
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="relative w-9 h-9 rounded-full bg-white/60 backdrop-blur-2xl border border-black/10 flex items-center justify-center text-[#1a1a1a] font-bold text-sm shadow-[0_8px_32px_0_rgba(0,0,0,0.08)]">
+              S
+            </div>
+            <span className="font-bold tracking-tight text-lg text-[#1a1a1a]">Student Portal.</span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <div className="hidden sm:flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-white/50 backdrop-blur-xl border border-black/5 text-xs font-mono text-[#6b6b6b]">
+              <Activity className="w-3 h-3 text-[#ff7a00]" />
+              <span>Lat: {systemLoad}</span>
+            </div>
+            <div className="px-4 py-2 rounded-full bg-white/60 border border-black/10 text-xs font-medium text-[#1a1a1a] flex items-center space-x-2">
+              <User className="w-3.5 h-3.5 text-[#ff7a00]" />
+              <span>alex_student_09</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN CONTAINER */}
+      <main className="max-w-5xl mx-auto px-6 py-12 relative z-10 space-y-8">
         
-        {/* User Info */}
-        <div className="flex items-center gap-4 mb-8 border-b border-white/10 pb-6">
-          <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/50">
-            <span className="text-2xl font-bold text-indigo-400">RS</span>
+        {/* BANNER NOTIFICATION */}
+        {paymentStatus && (
+          <div className="backdrop-blur-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 px-6 py-4 rounded-2xl flex items-center space-x-3 shadow-lg transition-all">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <span className="text-xs font-medium">{paymentStatus}</span>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Rahul Sharma</h2>
-            <p className="text-white/50 text-sm font-mono">ID: 24BCE10023</p>
+        )}
+
+        <div className="backdrop-blur-[50px] bg-white/50 border border-black/10 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.1)]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-black/10 gap-4">
+            <div>
+              <span className="text-xs font-mono uppercase tracking-widest text-[#ff7a00] font-semibold">Account Ledger</span>
+              <h2 className="text-2xl font-bold text-[#1a1a1a] tracking-tight mt-1">Assigned Fees & Payments</h2>
+            </div>
+            <div className="px-3.5 py-1.5 rounded-full bg-white/60 border border-black/10 text-xs font-mono text-[#6b6b6b]">
+              Ledger Sync: <strong className="text-emerald-600">VERIFIED</strong>
+            </div>
           </div>
-        </div>
 
-        {/* Dues Breakdown */}
-        <div className="mb-8">
-          <h3 className="text-white/70 text-sm font-bold uppercase tracking-wider mb-4">Pending Dues</h3>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between items-center bg-black/20 p-4 rounded-xl border border-white/5">
-              <span className="text-white">Semester Tuition (Fall)</span>
-              <span className="text-white font-mono">₹45,000</span>
-            </div>
-            
-            <div className="flex justify-between items-center bg-black/20 p-4 rounded-xl border border-white/5">
-              <span className="text-white">Hostel & Mess</span>
-              <span className="text-white font-mono">₹7,000</span>
-            </div>
+          <div className="mt-8 space-y-4">
+            {fees.map((fee) => (
+              <div key={fee.id} className="backdrop-blur-2xl bg-white/60 border border-black/10 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-mono text-[#ff7a00] font-bold">{fee.id}</span>
+                    <span className="text-xs text-[#6b6b6b]">• Due: {fee.dueDate}</span>
+                  </div>
+                  <h4 className="text-base font-bold text-[#1a1a1a]">{fee.title}</h4>
+                </div>
 
-            {/* The Dynamic Fee Example */}
-            <div className="flex justify-between items-center bg-red-500/10 p-4 rounded-xl border border-red-500/20">
-              <div className="flex items-center gap-2">
-                <span className="text-red-400">Late Lab Equipment Return</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 uppercase">Penalty</span>
+                <div className="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-end">
+                  <span className="text-lg font-extrabold text-[#1a1a1a]">${fee.amount}</span>
+                  {fee.status === 'PENDING' ? (
+                    <button 
+                      onClick={() => handlePay(fee.id)}
+                      className="px-5 py-2.5 rounded-full bg-[#ff7a00] hover:bg-[#e06b00] text-white text-xs font-semibold shadow-[0_4px_16px_rgba(255,122,0,0.3)] transition-all flex items-center space-x-1.5"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>Pay Securely</span>
+                    </button>
+                  ) : (
+                    <span className="px-4 py-2 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200 flex items-center space-x-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>PAID & LOGGED</span>
+                    </span>
+                  )}
+                </div>
               </div>
-              <span className="text-red-400 font-mono">₹500</span>
-            </div>
+            ))}
           </div>
         </div>
+      </main>
 
-        {/* Total & Action */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 border-t border-white/10 pt-6">
-          <div>
-            <p className="text-white/50 text-sm mb-1">Total Amount Payable</p>
-            <p className="text-4xl font-bold text-white">₹52,500</p>
-          </div>
-
-          {paymentState === "idle" && (
-            <button 
-              onClick={handlePayment}
-              className="w-full md:w-auto px-8 py-4 rounded-xl bg-indigo-500/80 hover:bg-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_40px_rgba(99,102,241,0.4)] transition-all font-bold tracking-wide flex items-center justify-center gap-2"
-            >
-              Pay via UPI
-            </button>
-          )}
-
-          {paymentState === "processing" && (
-            <div className="w-full md:w-auto px-8 py-4 rounded-xl bg-white/10 border border-white/20 text-white font-bold flex items-center justify-center gap-3">
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              Processing Request...
-            </div>
-          )}
-
-          {paymentState === "success" && (
-            <div className="w-full md:w-auto px-8 py-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold flex items-center justify-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-              Payment Successful
-            </div>
-          )}
-        </div>
-
-      </GlassCard>
+      <footer className="border-t border-black/10 bg-white/30 backdrop-blur-3xl py-8 text-center text-xs text-[#6b6b6b] relative z-10 mt-12">
+        <p>Cannabis Lab Student Portal // Immutable Ledger Verified</p>
+      </footer>
     </div>
   );
 }
