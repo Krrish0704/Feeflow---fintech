@@ -21,15 +21,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html
-      lang="en"
-      className={`dark ${inter.variable} ${sora.variable} ${jetbrains.variable}`}
-    >
-      <body className="font-sans antialiased bg-neutral-950 text-neutral-100 min-h-screen">
+    <html lang="en" className="dark inter" suppressHydrationWarning={true}>
+      <body 
+        className="font-sans antialiased bg-neutral-950 text-neutral-100 min-h-screen"
+        suppressHydrationWarning={true}
+      >
         {children}
       </body>
     </html>

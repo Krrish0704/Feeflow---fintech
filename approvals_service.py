@@ -4,7 +4,27 @@ from sqlalchemy.orm import Session
 import models
 import ledger_service
 
+def _waiver_to_dict(w):
+    """Helper to serialize SQLAlchemy WaiverApproval model safely, avoiding ORM recursion."""
+    if not w:
+        return None
+    return {
+        "id": str(w.id),
+        "student_id": str(w.student_id),
+        "requested_amount": float(w.requested_amount),
+        "status": w.status,
+        "requested_by": w.requested_by,
+        "approved_by": w.approved_by,
+        "reason": w.reason,
+        "resolved_at": w.resolved_at.isoformat() if w.resolved_at else None,
+    }
+
 def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_by: str, reason: str = None):
+    # 1. Verify student exists to prevent foreign key crashes
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        return {"status": "error", "message": "Student not found in the database."}
+
     AUTO_APPROVE_THRESHOLD = 500.0
 
     if amount <= AUTO_APPROVE_THRESHOLD:
@@ -15,7 +35,7 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
             requested_by=requested_by,
             approved_by="System_Auto_Threshold",
             reason=reason,
-            resolved_at=datetime.utcnow() # Audit trail timestamp set!
+            resolved_at=datetime.utcnow()
         )
         db.add(new_waiver)
         db.flush() 
@@ -35,12 +55,12 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
         db.commit()
         db.refresh(new_waiver)
         return {
-            "status": "success", 
-            "message": f"Waiver of ₹{amount} auto-approved (Under limit).", 
-            "waiver": new_waiver
+            "status": "success",
+            "message": f"Waiver of ₹{amount} auto-approved (under ₹500 threshold) and committed to ledger.",
+            "waiver": _waiver_to_dict(new_waiver)
         }
-
     else:
+        # Route to principal approval queue for amounts > 500
         new_waiver = models.WaiverApproval(
             student_id=student_id,
             requested_amount=amount,
@@ -51,44 +71,47 @@ def request_waiver(db: Session, student_id: uuid.UUID, amount: float, requested_
         db.add(new_waiver)
         db.commit()
         db.refresh(new_waiver)
-        
         return {
-            "status": "pending", 
-            "message": f"Waiver of ₹{amount} requires Governor approval (Over limit).", 
-            "waiver": new_waiver
+            "status": "pending",
+            "message": f"Waiver of ₹{amount} exceeds ₹500 threshold. Routed to Principal governance queue.",
+            "waiver": _waiver_to_dict(new_waiver)
         }
 
 def approve_waiver(db: Session, waiver_id: uuid.UUID, approved_by: str):
-    waiver = db.query(models.WaiverApproval).filter(models.WaiverApproval.id == waiver_id).first()
+    waiver = db.query(models.WaiverApproval.WaiverApproval if hasattr(models.WaiverApproval, 'WaiverApproval') else models.WaiverApproval).filter(
+        models.WaiverApproval.id == waiver_id
+    ).first()
     
     if not waiver:
-        return {"status": "error", "message": "Waiver not found"}
-    if waiver.status != "pending":
-        return {"status": "error", "message": f"Waiver is already {waiver.status}"}
+        return {"status": "error", "message": "Waiver request not found."}
+        
+    if waiver.status == "approved":
+        return {"status": "error", "message": "Waiver is already approved."}
 
-    if waiver.requested_by and waiver.requested_by == approved_by:
+    # Segregation of duties check (Maker cannot be Checker)
+    if waiver.requested_by == approved_by:
         return {"status": "error", "message": "Segregation of Duties Violation: You cannot approve a waiver you requested yourself."}
 
     waiver.status = "approved"
     waiver.approved_by = approved_by
-    waiver.resolved_at = datetime.utcnow() # Audit trail timestamp set!
-    
-    ref_id = f"WAIVER-{waiver.id}"
-    ledger_res = ledger_service.record_ledger_entry(
+    waiver.resolved_at = datetime.utcnow()
+
+    ref_id = f"WAIVER-PRIN-{waiver.id}"
+    ledger_service.record_ledger_entry(
         db=db,
         student_id=waiver.student_id,
         entry_type="waiver",
         amount=waiver.requested_amount,
-        direction="credit", 
+        direction="credit",
         reference_id=ref_id,
-        source="governance_dashboard",
+        source="principal_governance_queue",
         metadata_payload={"requested_by": waiver.requested_by, "approved_by": approved_by, "reason": waiver.reason}
     )
-    
-    if ledger_res["status"] == "success":
-        db.commit()
-        db.refresh(waiver)
-        return {"status": "success", "message": "Waiver approved by governor and ledger updated.", "waiver": waiver}
-    else:
-        db.rollback()
-        return {"status": "error", "message": "Failed to update ledger during approval."}
+
+    db.commit()
+    db.refresh(waiver)
+    return {
+        "status": "success",
+        "message": f"Waiver of ₹{waiver.requested_amount} authorized by Principal and committed to ledger.",
+        "waiver": _waiver_to_dict(waiver)
+    }

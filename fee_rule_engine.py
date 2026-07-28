@@ -1,14 +1,17 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 import models
 import ledger_service
 
 def resolve_amount(base_amount: float, conditions: dict | None, due_date: datetime, as_of: datetime = None) -> float:
     """Evaluates JSONB conditions for late penalties or sibling discounts dynamically."""
-    as_of = as_of or datetime.utcnow()
+    as_of = as_of or datetime.now(timezone.utc)
     base_amount = float(base_amount)
     
+    if due_date.tzinfo is None:
+        due_date = due_date.replace(tzinfo=timezone.utc)
+        
     if not conditions:
         return base_amount
     

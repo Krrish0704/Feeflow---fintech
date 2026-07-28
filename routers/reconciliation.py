@@ -1,12 +1,14 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 import database
 import schemas
 import models
 import reconciliation_service
+import csv
+import io
 
-router = APIRouter(prefix="/reconciliation", tags=["Offline Sync & Reconciliation"])
+router = APIRouter(prefix="/reconciliation", tags=["Reconciliation & Bulk Import"])
 
 @router.post("/sync-offline")
 def sync_offline_payments(payment: schemas.OfflinePaymentCreate, db: Session = Depends(database.get_db)):

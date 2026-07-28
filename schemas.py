@@ -4,8 +4,14 @@ from datetime import datetime
 from uuid import UUID
 
 class StudentCreate(BaseModel):
+    admission_number: str
     name: str
-    grade: str
+    grade: Optional[str] = None
+    total_fee: Optional[float] = 0.0
+    paid_amount: Optional[float] = 0.0
+    due_amount: Optional[float] = 0.0
+    late_fee: Optional[float] = 0.0
+    status: Optional[str] = "PENDING"
 
 class FeeStructureCreate(BaseModel):
     name: str

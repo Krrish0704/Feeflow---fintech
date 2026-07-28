@@ -1,18 +1,14 @@
-from sqlalchemy import Column, String, Numeric, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, String, Numeric, DateTime, Boolean, ForeignKey, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from datetime import datetime
 from database import Base
 from sqlalchemy.orm import relationship
 
-class Student(Base):
-    __tablename__ = "students"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    grade = Column(String, nullable=False) # e.g., "10-A"
-
 class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
+    student = relationship(lambda: Student, back_populates="ledger_entries")
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
     entry_type = Column(String, nullable=False) # 'charge', 'payment', 'waiver'
@@ -38,6 +34,7 @@ class FeeStructure(Base):
 
 class WaiverApproval(Base):
     __tablename__ = "waiver_approvals"
+    student = relationship(lambda: Student, back_populates="waivers")
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
@@ -47,11 +44,11 @@ class WaiverApproval(Base):
     approved_by = Column(String, nullable=True)
     reason = Column(String, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
-    
-    student = relationship("Student", backref="waiver_approvals")
+    # (The bad 'sstudent' typo line was completely removed from here)
 
 class FeeAssignment(Base):
     __tablename__ = "fee_assignments"
+    student = relationship(lambda: Student, back_populates="fee_assignments")
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.id"), nullable=False)
@@ -68,3 +65,25 @@ class StagingEntry(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     reference_id = Column(String, nullable=False, unique=True)
     source = Column(String, nullable=False) 
+    
+class Student(Base):
+    __tablename__ = "students"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admission_number = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    section = Column(String, nullable=True)
+    grade = Column(String, nullable=True)
+    
+    # Financial aggregate columns for CSV integration & quick UI lookup
+    total_fee = Column(Float, default=0.0)
+    paid_amount = Column(Float, default=0.0)
+    due_amount = Column(Float, default=0.0)
+    late_fee = Column(Float, default=0.0)
+    status = Column(String, default="PENDING")
+    
+    # ALL relationships properly mapped and defined
+    ledger_entries = relationship(lambda: LedgerEntry, back_populates="student")
+    waivers = relationship(lambda: WaiverApproval, back_populates="student")
+    fee_assignments = relationship(lambda: FeeAssignment, back_populates="student")

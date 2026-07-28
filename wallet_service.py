@@ -30,8 +30,16 @@ def issue_refund_to_wallet(db: Session, student_id: uuid.UUID, amount: float, re
         metadata_payload={"reason": reason},
         auto_commit=True
     )
-
 def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
+    # 1. ACQUIRE ROW LOCK: Force concurrent requests for this student to wait in line
+    student_lock = db.query(models.Student).filter(
+        models.Student.id == student_id
+    ).with_for_update().first()
+    
+    if not student_lock:
+        return {"status": "error", "message": "Student not found."}
+
+    # 2. Safely read balance ONLY AFTER the lock is acquired
     current_wallet_balance = get_wallet_balance(db, student_id)
     if current_wallet_balance < amount:
         return {"status": "error", "message": f"Insufficient wallet balance. You only have ₹{current_wallet_balance}"}
@@ -39,7 +47,7 @@ def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
     ref_group = f"W-PAY-{uuid.uuid4().hex[:8]}"
     
     try:
-        # 1. DEBIT the wallet (auto_commit=False)
+        # 3. DEBIT the wallet (auto_commit=False)
         res1 = ledger_service.record_ledger_entry(
             db=db, student_id=student_id, entry_type="wallet_utilization",
             amount=amount, direction="debit", reference_id=f"{ref_group}-OUT",
@@ -50,7 +58,7 @@ def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
             db.rollback()
             return {"status": "error", "message": "Duplicate transaction reference."}
 
-        # 2. CREDIT the fee account (auto_commit=False)
+        # 4. CREDIT the fee account (auto_commit=False)
         res2 = ledger_service.record_ledger_entry(
             db=db, student_id=student_id, entry_type="payment",
             amount=amount, direction="credit", reference_id=f"{ref_group}-IN",
@@ -61,7 +69,7 @@ def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
             db.rollback()
             return {"status": "error", "message": "Duplicate transaction reference."}
 
-        # 3. ATOMIC COMMIT: Both entries land together or neither does
+        # 5. ATOMIC COMMIT: Both entries land together, and the row lock is released!
         db.commit()
         return {
             "status": "success", 
@@ -69,5 +77,5 @@ def pay_fee_from_wallet(db: Session, student_id: uuid.UUID, amount: float):
             "new_wallet_balance": current_wallet_balance - amount
         }
     except Exception as e:
-        db.rollback()
+        db.rollback() # Rolls back changes AND releases the row lock safely
         return {"status": "error", "message": f"Atomic transaction failed: {str(e)}"}
