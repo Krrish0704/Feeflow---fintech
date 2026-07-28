@@ -1,50 +1,37 @@
-"use client";
-import { ReactLenis } from 'lenis/react';
-import { motion } from "framer-motion";
-import './globals.css';
+import type { Metadata, Viewport } from 'next'
+import { Inter, Sora, JetBrains_Mono } from 'next/font/google'
+import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
+const sora = Sora({ subsets: ['latin'], variable: '--font-sora', display: 'swap' })
+const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' })
+
+export const metadata: Metadata = {
+  title: 'FeeFlow — Institutional Fee Intelligence for Indian Schools',
+  description:
+    'FeeFlow is an elite school fintech platform. A JSONB-driven rule engine, maker-checker governance, and a tamper-proof ledger that scales fee operations across Lakhs and Crores.',
+  generator: 'v0.app',
+  keywords: ['school fintech', 'fee management', 'India', 'maker-checker', 'ledger', 'FeeFlow'],
+}
+
+export const viewport: Viewport = {
+  colorScheme: 'dark',
+  themeColor: '#211a12',
+}
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
-    // Add suppressHydrationWarning here
-    <html lang="en" suppressHydrationWarning> 
-      
-      {/* Add suppressHydrationWarning here too */}
-      <body className="bg-slate-950 text-white overflow-x-hidden min-h-screen" suppressHydrationWarning>
-        <ReactLenis root options={{ lerp: 0.1, duration: 1.5 }}>
-          
-          {/* Animated Background Orbs */}
-          <div className="fixed inset-0 -z-50 overflow-hidden pointer-events-none">
-            <motion.div 
-              animate={{ 
-                scale: [1, 1.2, 1],
-                x: [0, 100, 0],
-                y: [0, -50, 0]
-              }}
-              transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-indigo-500/30 blur-[120px]" 
-            />
-            <motion.div 
-              animate={{ 
-                scale: [1, 1.5, 1],
-                x: [0, -100, 0],
-                y: [0, 100, 0]
-              }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] rounded-full bg-emerald-500/20 blur-[150px]" 
-            />
-          </div>
-
-          {/* Main App Content */}
-          <main className="relative z-10">
-            {children}
-          </main>
-
-        </ReactLenis>
+    <html
+      lang="en"
+      className={`dark ${inter.variable} ${sora.variable} ${jetbrains.variable}`}
+    >
+      <body className="font-sans antialiased bg-neutral-950 text-neutral-100 min-h-screen">
+        {children}
       </body>
     </html>
-  );
+  )
 }
