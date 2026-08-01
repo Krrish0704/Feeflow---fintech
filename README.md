@@ -150,7 +150,6 @@ cd Feeflow---fintech
 ### 2. Backend
 
 ```bash
-cd feeflow-backend
 docker-compose up --build
 ```
 
